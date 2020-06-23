@@ -39,11 +39,14 @@ void FillRange();
 void loadJpChs();
 void HookSelection();
 void UnHookSelection();
-void ReplaceSelection();
+//void ReplaceSelection();
+void __fastcall ReplaceSelection2(void* pThis);
+
+
 DWORD findBytes(const void* pattern, DWORD patternSize, DWORD lowerBound, DWORD upperBound);
 
 
-BOOL APIENTRY DllMain( HMODULE hModule,DWORD  ul_reason_for_call,LPVOID lpReserved)
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved)
 {
 	switch (ul_reason_for_call)
 	{
@@ -76,7 +79,7 @@ void Hook()
 {
 	// 1. 初始化地址
 	void* addr = OpenProcessAddr;
-	
+
 	// 2. Hook
 	//一般代码段是不可写的，需要改成可写
 	VirtualProtect((LPVOID)addr, 5, PAGE_EXECUTE_READWRITE, &oldProtect);
@@ -170,8 +173,8 @@ void InitGlobal()
 {
 	//char** table;
 	vector<vector<unsigned char>> table = {
-		{ 0x83, 0xC4, 0x08, 0x83, 0xFF, 0x02 },					// log函数
-		{ 0x53, 0x56, 0x57, 0x68, 0x00, 0x00, 0x04, 0x00, 0xE8 },					// 选择支HOOK点
+		{ 0x83, 0xC4, 0x08, 0x83, 0xFF, 0x02 },										// log函数
+		{ 0x53, 0x8B, 0xD9, 0x56, 0x8B, 0x35 },										// 选择支HOOK点
 		{ 0xFF, 0xD5, 0x68, 0x00, 0x00, 0x01, 0x00, 0x6A, 0x08, 0x50, 0xFF, 0xD6},	// 文本全局变量
 		{ 0x53, 0x53, 0x53, 0x53, 0x53, 0x53, 0xB9, 0x02, 0x00, 0x00, 0x00, 0xE8},	// 人名全局变量
 		{ 0x83, 0xC4, 0x08, 0x33, 0xC9, 0x39, 0x37, 0x74},							// 选择支全局变量
@@ -197,7 +200,7 @@ void InitGlobal()
 		{0xba, 0xda, 0xcc, 0xe5, 0x00}
 	};
 
-	int offset[] = {-0x69, -0x26, 0x12, 0x15, -0x4, 0x41, 0xA, -0xA, 0, 0, 0};
+	int offset[] = { -0x69, -0x1A, 0x12, 0x15, -0x4, 0x41, 0xA, -0xA, 0, 0, 0 };
 
 	FillRange();
 	Log(processStartAddress);
@@ -262,12 +265,12 @@ void loadIni()
 void myFunc()
 {
 	//printf("oldProtect: %d\nOpenProcessAddr: %x\nJmpByte: %x", oldProtect, OpenProcessAddr, *(int*)&JmpByte[1]);
-	
+
 	char* p = (char*)*textAddr;
 	char* pWrite = p;
 	char* pName = (char*)nameAddr;
 
-	char buffer[1000] = {0};
+	char buffer[1000] = { 0 };
 	int cnt = 0;
 	while (cnt < 1000 && *p)
 	{
@@ -283,7 +286,7 @@ void myFunc()
 	// 替换文本
 	string temp(buffer);
 	auto vk = jp_chs.find(temp);
-	char* newText=NULL;
+	char* newText = NULL;
 	if (vk != jp_chs.end())
 	{
 		// 替换文本
@@ -306,7 +309,7 @@ void myFunc()
 			*pName = 0x00;
 		}
 	}
-	
+
 	UnHook();
 	if (newText)
 	{
@@ -316,7 +319,7 @@ void myFunc()
 	{
 		(*(void(*)(char*))OpenProcessAddr)(buffer);
 	}
-	
+
 	Hook();
 }
 
@@ -328,7 +331,7 @@ void HookSelection()
 	VirtualProtect(addr, 5, PAGE_EXECUTE_READWRITE, &oldProtextSelection);
 
 	JmpByteSelection[0] = 0xE9;
-	*(DWORD*)&JmpByteSelection[1] = (DWORD)ReplaceSelection - (DWORD)addr - (DWORD)5;
+	*(DWORD*)&JmpByteSelection[1] = (DWORD)ReplaceSelection2 - (DWORD)addr - (DWORD)5;
 
 	memcpy(OldByteSelection, (void*)addr, 5);
 
@@ -343,7 +346,7 @@ void UnHookSelection()
 	VirtualProtect((LPVOID)OutputSelectionAddr, 5, oldProtextSelection, &p);
 }
 
-
+#if 0
 void ReplaceSelection()
 {
 	/*
@@ -389,6 +392,59 @@ void ReplaceSelection()
 
 	UnHookSelection();
 	(*(void(*)())OutputSelectionAddr)();
+	HookSelection();
+}
+#endif
+
+void __fastcall ReplaceSelection2(void* pThis)
+{
+	/*
+	选择支文本可能出现的位置
+	[*(*addr+(0|4|8|c))+0x120]
+	*/
+	if (*PointersPage)
+	{
+		int* addPointer = (int*)*PointersPage;
+		while (*addPointer != 0x00000000 && *addPointer != 0xFFFFFFFF)
+		{
+			char* text = (char*)*addPointer;
+			text += 0x110;
+			string oldText(text);
+			if (*text)
+			{
+				auto vk = jp_chs.find(oldText);
+				if (vk != jp_chs.end())
+				{
+					for (int i = 0; i < vk->second.length(); i++)
+					{
+						text[i] = vk->second[i];
+					}
+					text[vk->second.length()] = 0x00;
+				}
+			}
+
+			text += 0x10;
+			oldText = string(text);
+			if (*text)
+			{
+				auto vk = jp_chs.find(oldText);
+				if (vk != jp_chs.end())
+				{
+					for (int i = 0; i < vk->second.length(); i++)
+					{
+						text[i] = vk->second[i];
+					}
+					text[vk->second.length()] = 0x00;
+				}
+			}
+
+			addPointer++;
+		}
+	}
+
+
+	UnHookSelection();
+	(*(void(__fastcall*)(void*))OutputSelectionAddr)(pThis);
 	HookSelection();
 }
 
