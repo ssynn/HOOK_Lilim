@@ -16,6 +16,21 @@ def save_file_b(path, data):
     with open(path, 'wb') as f:
         f.write(data)
 
+def strB2Q(ustring, exclude=()):
+    """半角转全角"""
+    rstring = ""
+    for uchar in ustring:
+        inside_code = ord(uchar)
+        if inside_code == 32:  # 半角空格直接转化
+            inside_code = 12288
+        elif inside_code >= 0x20 and inside_code <= 0x7E:  # 半角字符（除空格）根据关系转化
+            inside_code += 0xFEE0
+        if uchar in exclude:
+            rstring += uchar
+        else:
+            rstring += chr(inside_code)
+    return rstring
+
 class Lilim:
     def output_hook_dict(dict_name='test'):
         jp_chs = open_json('jp_chs.json')
